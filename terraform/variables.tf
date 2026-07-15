@@ -79,6 +79,6 @@ variable "store_and_notify_url" {
     Optional. If set, a catch-all route stores each inbound message in Mailgun
     and POSTs a notification to this URL (webhook). Leave empty to disable.
   EOT
-  type    = string
-  default = ""
+  type        = string
+  default     = ""
 }
