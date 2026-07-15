@@ -1,9 +1,10 @@
-# lokvritfoundation.org — Email infrastructure (Mailgun + GoDaddy) as code
+# lokvritfoundation.org — Email infrastructure (Mailgun + Route 53) as code
 
 Terraform + GitHub Actions to stand up email for the domain — **sending**
 (SPF/DKIM/tracking) and **receiving** (MX + inbound forwarding routes) —
 through [Mailgun](https://www.mailgun.com/), with all DNS records managed in
-GoDaddy.
+**AWS Route 53**. The domain is *registered* at GoDaddy, but its nameservers
+are delegated to a Route 53 hosted zone, which is authoritative for DNS.
 
 > **Domain name:** everything defaults to `lokvritfoundation.org` (matches the
 > repo/folder name and the `info@lokvritfoundation.org` example). If your
@@ -12,34 +13,55 @@ GoDaddy.
 
 ## What it creates
 
-| Where    | Resource | Purpose |
-|----------|----------|---------|
-| Mailgun  | `mailgun_domain` | Sending domain + DKIM keypair + SMTP creds |
-| GoDaddy  | `godaddy-dns_record` (TXT) | SPF record — authorizes Mailgun to send |
-| GoDaddy  | `godaddy-dns_record` (TXT) | DKIM record — signs outgoing mail |
-| GoDaddy  | `godaddy-dns_record` (CNAME) | Open/click tracking (`email.<domain>`) |
-| GoDaddy  | `godaddy-dns_record` (MX) | Route inbound mail to Mailgun |
-| Mailgun  | `mailgun_route` | Forward `info@…` (etc.) to a real mailbox |
+| Where     | Resource | Purpose |
+|-----------|----------|---------|
+| Mailgun   | `mailgun_domain` | Sending domain + DKIM keypair + SMTP creds |
+| Route 53  | `aws_route53_record` (TXT) | SPF record — authorizes Mailgun to send |
+| Route 53  | `aws_route53_record` (TXT) | DKIM record — signs outgoing mail |
+| Route 53  | `aws_route53_record` (CNAME) | Open/click tracking (`email.<domain>`) |
+| Route 53  | `aws_route53_record` (MX) | Route inbound mail to Mailgun |
+| Mailgun   | `mailgun_route` | Forward `info@…` (etc.) to a real mailbox |
 
-The Mailgun-required DNS records are read straight from the Mailgun resource's
-`sending_records_set` / `receiving_records_set` outputs and materialized in
-GoDaddy — so there's no copy/paste and the two stay in sync.
+The hosted zone is looked up with a `data "aws_route53_zone"` (it must already
+exist). The Mailgun-required DNS records are read straight from the Mailgun
+resource's `sending_records_set` / `receiving_records_set` outputs and created
+in Route 53 — no copy/paste, and the two stay in sync.
 
 ## Prerequisites
 
 1. **Mailgun account** and a **private API key**
    (Dashboard → *Send* → *API keys*). Note your region (**US** or **EU**) — it
    must match `mailgun_region`.
-2. **GoDaddy production API key + secret** from
-   <https://developer.godaddy.com/keys>.
-   > GoDaddy restricted its DNS API in 2024; as of the latest policy it works
-   > for accounts with **≥ 1 domain**, so a single-domain account is fine.
-   > Create a **Production** key (not OTE), since OTE won't touch your real DNS.
+2. **A Route 53 hosted zone** for the domain must already exist, and GoDaddy's
+   nameservers for the domain must be set to that zone's NS records (delegation).
+   See *One-time: delegate DNS to Route 53* below. AWS credentials with
+   Route 53 access (and S3 state access) are used — same creds as the backend.
 3. An existing mailbox to forward inbound mail to (e.g. a Gmail address). On
    Mailgun's free plan, forward destinations must be *authorized recipients*.
 4. For CI remote state: an **S3 bucket** (state locking is handled natively by
    the S3 backend — no DynamoDB needed), or comment out `terraform/backend.tf`
    to use local state.
+
+## One-time: delegate DNS to Route 53
+
+Terraform expects the hosted zone to already exist (it uses a data source, not
+a resource). Create it once and point GoDaddy at it:
+
+```bash
+# 1. Create the hosted zone (skip if it already exists).
+aws route53 create-hosted-zone \
+  --name lokvritfoundation.org \
+  --caller-reference "$(date +%s)"
+
+# 2. Read the zone's 4 nameservers.
+aws route53 get-hosted-zone --id <ZONE_ID> \
+  --query 'DelegationSet.NameServers' --output text
+```
+
+Then in the **GoDaddy** dashboard (Domain → *Nameservers* → *Change* → *Enter
+my own nameservers*), set the domain's nameservers to those 4 Route 53 values.
+Delegation can take up to a few hours to propagate. After the first Terraform
+apply you can also read them back with `terraform output route53_name_servers`.
 
 ## One-time: create the state bucket (manual)
 
@@ -75,11 +97,13 @@ recover a previous state if an apply corrupts it.
 
 ```bash
 cd terraform
-cp terraform.tfvars.example terraform.tfvars   # edit domain + forward routes
+# edit terraform.tfvars: domain, aws_region, forward routes
 
 export TF_VAR_mailgun_api_key="key-xxxxxxxxxxxxxxxx"
-export GODADDY_API_KEY="xxxx"
-export GODADDY_API_SECRET="xxxx"
+# AWS credentials for Route 53 + S3 state (standard AWS SDK env vars):
+export AWS_ACCESS_KEY_ID="xxxx"
+export AWS_SECRET_ACCESS_KEY="xxxx"
+export AWS_REGION="ap-south-1"
 
 # Local state (skip -backend-config); or configure S3 as in the workflow.
 terraform init
@@ -151,17 +175,15 @@ state bucket* above).
 | Secret | Value |
 |--------|-------|
 | `MAILGUN_API_KEY` | Mailgun private API key |
-| `GODADDY_API_KEY` | GoDaddy production API key |
-| `GODADDY_API_SECRET` | GoDaddy production API secret |
-| `AWS_ACCESS_KEY_ID` | AWS credential with access to the state bucket |
+| `AWS_ACCESS_KEY_ID` | AWS credential with Route 53 + S3 state access |
 | `AWS_SECRET_ACCESS_KEY` | AWS credential |
 
 **Variables** (*Variables* tab):
 
 | Variable | Example |
 |----------|---------|
-| `AWS_REGION` | `us-east-1` |
-| `TF_STATE_BUCKET` | `my-tfstate-bucket` |
+| `AWS_REGION` | `ap-south-1` |
+| `TF_STATE_BUCKET` | `lokvritfoundation-tfstate` |
 | `MAILGUN_REGION` | `us` or `eu` |
 
 Non-secret Terraform inputs (domain, routes) are committed in
@@ -178,6 +200,10 @@ env vars and never written to disk.
 - **Apex MX:** with `mail_domain == root_domain`, all mail for the domain flows
   to Mailgun. Use a subdomain (`mg.…`) if you need the apex for another
   provider.
+- **The IAM identity needs Route 53 permissions** (`route53:ListHostedZones*`,
+  `route53:GetHostedZone`, `route53:ChangeResourceRecordSets`,
+  `route53:GetChange`, `route53:ListResourceRecordSets`) in addition to the S3
+  state permissions.
 - **Provider docs:** [wgebis/mailgun](https://registry.terraform.io/providers/wgebis/mailgun/latest/docs)
-  · [veksh/godaddy-dns](https://registry.terraform.io/providers/veksh/godaddy-dns/latest/docs)
+  · [hashicorp/aws — route53_record](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/route53_record)
 ```

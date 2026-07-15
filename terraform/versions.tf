@@ -6,9 +6,9 @@ terraform {
       source  = "wgebis/mailgun"
       version = "~> 0.7"
     }
-    godaddy-dns = {
-      source  = "veksh/godaddy-dns"
-      version = "~> 0.3"
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
     }
     random = {
       source  = "hashicorp/random"

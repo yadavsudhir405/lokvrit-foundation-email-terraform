@@ -1,7 +1,13 @@
 variable "root_domain" {
-  description = "The domain registered in GoDaddy (the DNS zone). e.g. lokvritfoundation.org"
+  description = "The domain / Route 53 hosted zone name. Registered at GoDaddy, but DNS is served by Route 53. e.g. lokvritfoundation.org"
   type        = string
   default     = "lokvritfoundation.org"
+}
+
+variable "aws_region" {
+  description = "AWS region for the provider (Route 53 is global, but the provider still needs a region; keep it aligned with your state bucket)."
+  type        = string
+  default     = "ap-south-1"
 }
 
 variable "mail_domain" {
@@ -48,7 +54,7 @@ variable "dkim_key_size" {
 }
 
 variable "record_ttl" {
-  description = "TTL (seconds) for the DNS records created in GoDaddy. GoDaddy minimum is 600."
+  description = "TTL (seconds) for the DNS records created in Route 53."
   type        = number
   default     = 3600
 

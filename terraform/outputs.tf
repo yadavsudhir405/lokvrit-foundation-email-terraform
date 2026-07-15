@@ -20,15 +20,24 @@ output "smtp_server" {
 }
 
 output "dns_records_created" {
-  description = "The DNS records created in GoDaddy for Mailgun."
+  description = "The DNS records created in Route 53 for Mailgun."
   value = {
     for k, r in local.dns_records : k => {
-      type     = r.type
-      name     = r.name
-      value    = r.data
-      priority = r.priority
+      type   = r.type
+      name   = r.name
+      values = r.values
     }
   }
+}
+
+output "route53_zone_id" {
+  description = "The Route 53 hosted zone the records were created in."
+  value       = data.aws_route53_zone.this.zone_id
+}
+
+output "route53_name_servers" {
+  description = "Route 53 nameservers for this zone. Set these as the domain's nameservers at GoDaddy to delegate DNS."
+  value       = data.aws_route53_zone.this.name_servers
 }
 
 output "verification_hint" {

@@ -2,9 +2,11 @@ provider "mailgun" {
   api_key = var.mailgun_api_key
 }
 
-# The godaddy-dns provider reads credentials from the environment:
-#   GODADDY_API_KEY / GODADDY_API_SECRET
-# (set as GitHub secrets in the workflow). No arguments needed here.
-provider "godaddy-dns" {}
+# AWS is used for Route 53 (DNS) and the S3 state backend. Credentials come
+# from the environment: AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY (GitHub
+# secrets), and the region from AWS_REGION / var.aws_region.
+provider "aws" {
+  region = var.aws_region
+}
 
 provider "random" {}

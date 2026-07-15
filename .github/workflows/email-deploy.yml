@@ -1,6 +1,6 @@
 name: email-deploy
 
-# Provisions the Mailgun domain + GoDaddy DNS + inbound routes from terraform/.
+# Provisions the Mailgun domain + Route 53 DNS + inbound routes from terraform/.
 # Requires the S3 state bucket to exist (created once, manually — see README).
 #
 # Triggers:
@@ -33,13 +33,12 @@ env:
 
   # --- Provider credentials (GitHub secrets) ---
   TF_VAR_mailgun_api_key: ${{ secrets.MAILGUN_API_KEY }}
-  GODADDY_API_KEY: ${{ secrets.GODADDY_API_KEY }}
-  GODADDY_API_SECRET: ${{ secrets.GODADDY_API_SECRET }}
 
-  # --- AWS creds for the S3 state backend ---
+  # --- AWS creds for Route 53 (DNS) + the S3 state backend ---
   AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
   AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
   AWS_REGION: ${{ vars.AWS_REGION }}
+  TF_VAR_aws_region: ${{ vars.AWS_REGION }}
 
 jobs:
   email-deploy:
