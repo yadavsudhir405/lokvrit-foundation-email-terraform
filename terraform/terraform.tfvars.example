@@ -1,0 +1,30 @@
+# Copy to terraform.tfvars for local runs (terraform.tfvars is git-ignored).
+# In CI these come from GitHub secrets/vars — see .github/workflows/terraform.yml.
+
+root_domain    = "lokvritfoundation.org"
+mail_domain    = "lokvritfoundation.org" # or "mg.lokvritfoundation.org"
+mailgun_region = "us"                    # "us" or "eu"
+dkim_key_size  = 1024
+record_ttl     = 3600
+
+# mailgun_api_key is NOT set here — pass it via TF_VAR_mailgun_api_key so the
+# secret never lands in a file. For local runs:
+#   export TF_VAR_mailgun_api_key="key-xxxxxxxx"
+
+# Forward inbound mail to mailboxes you already own.
+forward_routes = [
+  {
+    recipient   = "info@lokvritfoundation.org"
+    destination = "your-real-inbox@gmail.com"
+    priority    = 10
+    description = "Info mailbox"
+  },
+  # {
+  #   recipient   = "contact@lokvritfoundation.org"
+  #   destination = "your-real-inbox@gmail.com"
+  #   priority    = 10
+  # },
+]
+
+# Optional webhook to store + notify on inbound mail (leave "" to disable).
+store_and_notify_url = ""
